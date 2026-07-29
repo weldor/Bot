@@ -1,2 +1,2 @@
-aiogram
-google-generativeai
+python-telegram-bot==22.8
+google-genai>=1.0
