@@ -114,7 +114,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         messages.append({"role": "user", "content": content_payload})
 
         response = client.chat.completions.create(
-            model="grok-2-vision-1212",
+            model="grok-2-vision-latest",
             messages=messages,
         )
 
