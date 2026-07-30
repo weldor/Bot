@@ -15,7 +15,7 @@ from telegram.ext import (
     filters,
 )
 
-# Логирование
+# Настройка логирования
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
     level=logging.INFO,
@@ -54,17 +54,25 @@ if not GROQ_API_KEY or not OPENROUTER_API_KEY or not TELEGRAM_BOT_TOKEN:
     print("ОШИБКА: Проверь ключи GROQ_API_KEY, OPENROUTER_API_KEY и TELEGRAM_BOT_TOKEN в Render!", flush=True)
     sys.exit(1)
 
-# Groq — для текста
+# Groq — для текста (стабильная модель)
 groq_client = OpenAI(
     api_key=GROQ_API_KEY,
     base_url="https://api.groq.com/openai/v1"
 )
 
-# OpenRouter — для картинок
+# OpenRouter — для фото
 openrouter_client = OpenAI(
     api_key=OPENROUTER_API_KEY,
     base_url="https://openrouter.ai/api/v1"
 )
+
+# Список бесплатных Vision-моделей на OpenRouter для перебора при 404
+VISION_MODELS = [
+    "qwen/qwen-2-vl-72b-instruct:free",
+    "mistralai/pixtral-12b:free",
+    "google/gemini-2.0-flash-thinking-exp:free",
+    "meta-llama/llama-3.2-11b-vision-instruct",
+]
 
 SYSTEM_INSTRUCTION = (
     "Ты саркастичный и юморной друг для общения. "
@@ -101,7 +109,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
-        "🤖 Бот использует Llama 3.3 для текста и Llama Vision для картинок.\n\n"
+        "🤖 Текст обрабатывается через Llama 3.3 (Groq), фото — через OpenRouter Vision.\n\n"
         "/clear — очистить историю диалога"
     )
 
@@ -118,11 +126,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     user_text = update.message.text or update.message.caption or ""
 
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
-
     history = chat_histories.get(user_id, [])
 
     try:
-        # ОБРАБОТКА КАРТИНКИ -> OpenRouter (Llama Vision Free)
+        # ОБРАБОТКА КАРТИНКИ (OpenRouter с автоперебором моделей)
         if update.message.photo:
             photo = update.message.photo[-1]
             photo_file = await photo.get_file()
@@ -142,17 +149,28 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             messages.extend(history)
             messages.append({"role": "user", "content": content_payload})
 
-            response = openrouter_client.chat.completions.create(
-                model="meta-llama/llama-3.2-11b-vision-instruct:free",
-                messages=messages,
-            )
+            reply_text = None
+            for model_name in VISION_MODELS:
+                try:
+                    logger.info(f"Пробуем обработать картинку через {model_name}...")
+                    response = openrouter_client.chat.completions.create(
+                        model=model_name,
+                        messages=messages,
+                    )
+                    reply_text = response.choices[0].message.content
+                    if reply_text:
+                        break
+                except Exception as model_err:
+                    logger.warning(f"Модель {model_name} недоступна: {model_err}")
 
-            reply_text = response.choices[0].message.content
+            if not reply_text:
+                await update.message.reply_text("⚠️ Все бесплатные Vision-модели сейчас недоступны. Попробуй позже или пришли текст.")
+                return
 
             history.append({"role": "user", "content": content_payload})
             history.append({"role": "assistant", "content": reply_text})
 
-        # ОБРАБОТКА ТЕКСТА -> Groq (Llama 3.3 70B)
+        # ОБРАБОТКА ТЕКСТА (Groq Llama 3.3 70B)
         else:
             if not user_text:
                 return
