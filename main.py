@@ -1,11 +1,12 @@
-from http.server import BaseHTTPRequestHandler, HTTPServer
 import logging
 import os
 import sys
 import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from google import genai
 from google.genai import types
+from google.genai.errors import ClientError
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -53,8 +54,14 @@ if not GEMINI_API_KEY or not TELEGRAM_BOT_TOKEN:
     print("ОШИБКА: Проверь GEMINI_API_KEY и TELEGRAM_BOT_TOKEN в Render!", flush=True)
     sys.exit(1)
 
-# Клиент Gemini
 client = genai.Client(api_key=GEMINI_API_KEY)
+
+# Порядок вызова моделей при превышении лимита (429)
+GEMINI_MODELS = [
+    "gemini-1.5-flash",
+    "gemini-2.0-flash",
+    "gemini-1.5-pro",
+]
 
 SYSTEM_INSTRUCTION = (
     "Ты саркастичный и юморной друг для общения. "
@@ -77,7 +84,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
-        "🤖 Бот работает на Gemini 2.0 Flash (текст + фото).\n\n"
+        "🤖 Бот работает на Gemini API (текст + фото).\n\n"
         "/clear — очистить историю диалога"
     )
 
@@ -100,7 +107,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     try:
         user_parts = []
 
-        # Обработка изображения
         if update.message.photo:
             photo = update.message.photo[-1]
             photo_file = await photo.get_file()
@@ -109,32 +115,45 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 types.Part.from_bytes(data=bytes(image_bytes), mime_type="image/jpeg")
             )
 
-        # Обработка текста
         if user_text:
             user_parts.append(types.Part.from_text(text=user_text))
 
         if not user_parts:
             return
 
-        # Создаем объект сообщения пользователя
         user_content = types.Content(role="user", parts=user_parts)
-
-        # Собираем контекст для отправки
         contents = list(history) + [user_content]
 
         config = types.GenerateContentConfig(
             system_instruction=SYSTEM_INSTRUCTION,
         )
 
-        response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=contents,
-            config=config,
-        )
+        reply_text = None
 
-        reply_text = response.text or "Ничего не могу сказать по этому поводу."
+        for model_name in GEMINI_MODELS:
+            try:
+                logger.info(f"Запрос к модели {model_name}...")
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=contents,
+                    config=config,
+                )
+                reply_text = response.text
+                if reply_text:
+                    break
+            except ClientError as e:
+                if e.code == 429:
+                    logger.warning(f"Лимит 429 на {model_name}, пробуем следующую...")
+                    continue
+                raise e
+            except Exception as e:
+                logger.warning(f"Ошибка на {model_name}: {e}")
+                continue
 
-        # Создаем объект сообщения модели для сохранения в историю
+        if not reply_text:
+            await update.message.reply_text("⚠️ Превышен лимит запросов Gemini API. Попробуй через минуту.")
+            return
+
         model_content = types.Content(
             role="model",
             parts=[types.Part.from_text(text=reply_text)],
