@@ -1,3 +1,4 @@
+import asyncio
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import logging
 import os
@@ -59,12 +60,11 @@ if not GEMINI_API_KEY or not TELEGRAM_BOT_TOKEN:
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 
-# Список актуальных моделей для перебора
+# Актуальные модели Gemini 2.0
 GEMINI_MODELS = [
     "gemini-2.0-flash",
     "gemini-2.0-flash-lite",
-    "gemini-1.5-flash-latest",
-    "gemini-1.5-pro",
+    "gemini-2.0-flash-exp",
 ]
 
 SYSTEM_INSTRUCTION = (
@@ -145,24 +145,36 @@ async def handle_message(
     reply_text = None
 
     for model_name in GEMINI_MODELS:
-      try:
-        logger.info(f"Запрос к модели {model_name}...")
-        response = client.models.generate_content(
-            model=model_name,
-            contents=contents,
-            config=config,
-        )
-        reply_text = response.text
-        if reply_text:
+      for attempt in range(2):
+        try:
+          logger.info(f"Запрос к модели {model_name} (попытка {attempt + 1})...")
+          response = client.models.generate_content(
+              model=model_name,
+              contents=contents,
+              config=config,
+          )
+          reply_text = response.text
+          if reply_text:
+            break
+        except Exception as err:
+          err_msg = str(err)
+          logger.warning(
+              f"Модель {model_name} вернула ошибку: {err_msg[:100]}"
+          )
+
+          # Если превышен лимит 429, ждём 3 секунды перед повтором
+          if "429" in err_msg or "RESOURCE_EXHAUSTED" in err_msg:
+            await asyncio.sleep(3)
+            continue
           break
-      except Exception as err:
-        logger.warning(f"Модель {model_name} вернула ошибку: {err}")
-        continue
+
+      if reply_text:
+        break
 
     if not reply_text:
       await update.message.reply_text(
-          "⚠️ Все доступные модели Gemini временно не ответили. Попробуй через"
-          " минуту."
+          "⚠️ Бесплатный лимит Gemini исчерпан. Подожди 10-20 секунд и"
+          " отправь снова."
       )
       return
 
