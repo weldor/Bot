@@ -15,7 +15,7 @@ from telegram.ext import (
     filters,
 )
 
-# Настройка логирования
+# Логирование
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
     level=logging.INFO,
@@ -24,7 +24,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-# === Фоновый HTTP-сервер для Render ===
+# === HTTP-сервер для Render ===
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -42,7 +42,7 @@ def start_health_check_server():
 
 
 threading.Thread(target=start_health_check_server, daemon=True).start()
-# ======================================
+# ==============================
 
 print("==> Бот запускается...", flush=True)
 
@@ -54,13 +54,13 @@ if not GROQ_API_KEY or not OPENROUTER_API_KEY or not TELEGRAM_BOT_TOKEN:
     print("ОШИБКА: Проверь ключи GROQ_API_KEY, OPENROUTER_API_KEY и TELEGRAM_BOT_TOKEN в Render!", flush=True)
     sys.exit(1)
 
-# Клиент 1: Groq (для текста)
+# Groq — для текста
 groq_client = OpenAI(
     api_key=GROQ_API_KEY,
     base_url="https://api.groq.com/openai/v1"
 )
 
-# Клиент 2: OpenRouter (для картинок)
+# OpenRouter — для картинок
 openrouter_client = OpenAI(
     api_key=OPENROUTER_API_KEY,
     base_url="https://openrouter.ai/api/v1"
@@ -77,14 +77,14 @@ chat_histories: dict = {}
 
 
 def clean_history_for_groq(history: list) -> list:
-    """Преобразует сложный payload с картинками в чистый текст для текстовой нейросети."""
+    """Очищает историю от бинарных данных картинок для текстовой модели."""
     clean_history = []
     for msg in history:
         role = msg["role"]
         content = msg["content"]
         if isinstance(content, list):
             text_parts = [item["text"] for item in content if item.get("type") == "text"]
-            text = " ".join(text_parts) if text_parts else "[Пользователь прислал картинку]"
+            text = " ".join(text_parts) if text_parts else "[Картинка]"
             clean_history.append({"role": role, "content": text})
         else:
             clean_history.append({"role": role, "content": content})
@@ -95,7 +95,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     await update.message.reply_text(
         f"Привет, {user.first_name}! 👋\n\n"
-        "Отправляй мне текст или картинки — отвечу в своём стиле!\n\n"
+        "Отправляй текст или картинки — отвечу в своём стиле!\n\n"
         "/start — старт\n/clear — очистить контекст\n/help — помощь"
     )
 
@@ -111,7 +111,7 @@ async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     user_id = update.effective_user.id
     if user_id in chat_histories:
         del chat_histories[user_id]
-    await update.message.reply_text("✅ История диалога очищена!")
+    await update.message.reply_text("✅ История очищена!")
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -123,7 +123,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     history = chat_histories.get(user_id, [])
 
     try:
-        # ОБРАБОТКА КАРТИНКИ -> OpenRouter (Gemini Vision)
+        # ОБРАБОТКА КАРТИНКИ -> OpenRouter (Gemini)
         if update.message.photo:
             photo = update.message.photo[-1]
             photo_file = await photo.get_file()
@@ -144,7 +144,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             messages.append({"role": "user", "content": content_payload})
 
             response = openrouter_client.chat.completions.create(
-                model="google/gemini-2.0-flash-lite-001:free",
+                model="google/gemini-2.0-flash-exp:free",
                 messages=messages,
             )
 
@@ -178,7 +178,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     except Exception as e:
         logger.error(f"Ошибка при обработке сообщения: {e}")
-        await update.message.reply_text("⚠️ Произошла ошибка при обращении к нейросети.")
+        await update.message.reply_text("⚠️ Ошибка при запросе к нейросети.")
 
 
 def main() -> None:
