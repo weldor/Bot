@@ -15,7 +15,7 @@ from telegram.ext import (
     filters,
 )
 
-# Логирование
+# Настройка логирования
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
     level=logging.INFO,
@@ -24,7 +24,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-# === HTTP-сервер для проверки портов Render ===
+# === Фоновый HTTP-сервер для проверки портов Render ===
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -42,7 +42,7 @@ def start_health_check_server():
 
 
 threading.Thread(target=start_health_check_server, daemon=True).start()
-# ===============================================
+# ======================================================
 
 print("==> Бот запускается...", flush=True)
 
@@ -115,7 +115,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         elif not content_payload:
             return
 
-        model_name = "llama-3.2-11b-vision-preview" if is_vision else "llama-3.3-70b-versatile"
+        model_name = "llama-3.2-90b-vision-preview" if is_vision else "llama-3.3-70b-versatile"
         history = chat_histories.get(user_id, [])
 
         messages = [{"role": "system", "content": SYSTEM_INSTRUCTION}]
