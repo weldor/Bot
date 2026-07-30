@@ -118,7 +118,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         current_user_content = types.Content(role="user", parts=user_parts)
 
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-1.5-flash",
             contents=history + [current_user_content],
             config=types.GenerateContentConfig(
                 system_instruction=SYSTEM_INSTRUCTION,
