@@ -118,9 +118,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         history = chat_histories.get(user_id, [])
         current_user_content = types.Content(role="user", parts=user_parts)
 
-        # Вызов Gemini 1.5 flash-8b
+        # Вызов Gemini 1.5 flash
         response = client.models.generate_content(
-            model="gemini-1.5-flash-8b",
+            model="gemini-1.5-flash",
             contents=history + [current_user_content],
             config=types.GenerateContentConfig(
                 system_instruction=SYSTEM_INSTRUCTION,
