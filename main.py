@@ -115,7 +115,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         elif not content_payload:
             return
 
-        model_name = "llama-3.2-90b-vision-preview" if is_vision else "llama-3.3-70b-versatile"
+        model_name = "llama-3.2-11b-vision-instruct" if is_vision else "llama-3.3-70b-versatile"
         history = chat_histories.get(user_id, [])
 
         messages = [{"role": "system", "content": SYSTEM_INSTRUCTION}]
