@@ -77,7 +77,6 @@ chat_histories: dict = {}
 
 
 def clean_history_for_groq(history: list) -> list:
-    """Очищает историю от бинарных данных картинок для текстовой модели."""
     clean_history = []
     for msg in history:
         role = msg["role"]
@@ -102,7 +101,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
-        "🤖 Бот использует Llama 3.3 для текста и Gemini Flash для картинок.\n\n"
+        "🤖 Бот использует Llama 3.3 для текста и Llama Vision для картинок.\n\n"
         "/clear — очистить историю диалога"
     )
 
@@ -123,7 +122,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     history = chat_histories.get(user_id, [])
 
     try:
-        # ОБРАБОТКА КАРТИНКИ -> OpenRouter (Gemini)
+        # ОБРАБОТКА КАРТИНКИ -> OpenRouter (Llama Vision Free)
         if update.message.photo:
             photo = update.message.photo[-1]
             photo_file = await photo.get_file()
@@ -144,7 +143,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             messages.append({"role": "user", "content": content_payload})
 
             response = openrouter_client.chat.completions.create(
-                model="google/gemini-2.0-flash-exp:free",
+                model="meta-llama/llama-3.2-11b-vision-instruct:free",
                 messages=messages,
             )
 
