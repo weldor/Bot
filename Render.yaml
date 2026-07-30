@@ -1,11 +1,15 @@
-services:
+-1
++3
   - type: worker
     name: telegram-gemini-bot
     runtime: python
     buildCommand: pip install -r requirements.txt
     startCommand: python main.py
+    startCommand: python -u main.py
     envVars:
       - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: GEMINI_API_KEY
         sync: false
+      - key: PYTHONUNBUFFERED
+        value: "1"
